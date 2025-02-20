@@ -1,7 +1,7 @@
 [project]
-name = "reed-selector"
+name = "daily-rotator"
 version = "0.1.0"
-description = "A simple reed rotation calculator"
+description = "A simple daily item rotator"
 requires-python = ">=3.10"
 dependencies = [
     "python-fasthtml",
