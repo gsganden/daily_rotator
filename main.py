@@ -39,6 +39,7 @@ def get(num_items: int, request):
 
     return Titled(
         "Daily Rotation",
+        P("A simple tool that helps you rotate through numbered items daily."),
         P(
             f"Use item ",
             Strong(item_number),
@@ -55,6 +56,7 @@ def get(num_items: int, request):
 def home():
     return Titled(
         "Daily Rotation",
+        P("A simple tool that helps you rotate through numbered items daily. You can use it to cycle through saxophone reeds, daily workouts, study subjects, or anything else that needs regular rotation."),
         P("Enter the number of items you want to rotate through:"),
         rotation_form(),
         Script(timezone_script),
@@ -135,6 +137,11 @@ def styles():
             max-width: 800px;
             margin: 2rem auto;
             padding: 1rem;
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.5;
+        }
+        p {
+            color: #4b5563;
         }
         .result {
             color: #4b5563;
