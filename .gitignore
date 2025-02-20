@@ -1,0 +1,19 @@
+# Session data
+.sesskey
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.env
+.venv
+venv/
+ENV/
+
+# Package management
+*.egg-info/
+dist/
+build/
+.uv/
+uv.lock 
