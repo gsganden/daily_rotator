@@ -7,45 +7,59 @@ app, rt = fast_app()
 # Configuration
 MIN_ITEMS = 1
 
+
 def calculate_rotation(num_items: int, tz: str) -> int:
     """Calculate which item to use based on number of items and current date."""
     if num_items < MIN_ITEMS:
         raise ValueError(f"Number of items must be at least {MIN_ITEMS}")
-    
+
     timezone = pytz.timezone(tz)
     now = datetime.now(timezone)
     then = datetime(1970, 1, 1, tzinfo=timezone)
     return (now - then).days % num_items + 1
+
 
 @rt("/{num_items:int}")
 def get(num_items: int, request):
     tz = request.query_params.get("tz")
     if not tz:
         # If no timezone specified, return a page that auto-detects and redirects
-        return Titled("Redirecting...",
-                     Script(f"""
-                         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                         window.location.href = "/{num_items}?tz=" + encodeURIComponent(tz);
-                     """))
-    
+        return Titled(
+            "Redirecting...",
+            Script(f"""
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                window.location.href = "/{num_items}?tz=" + encodeURIComponent(tz);
+                """),
+        )
+
     timezone = pytz.timezone(tz)
     now = datetime.now(timezone)
     item_number = calculate_rotation(num_items, tz)
-    date_str = now.strftime('%A, %B %d, %Y')
-    
-    return Titled("Daily Rotation", 
-                 P(f"Use item ", Strong(item_number), f" today! ({date_str} in {tz})",
-                   class_="result"),
-                 P("Change number of items:"),
-                 rotation_form(),
-                 Script(timezone_script))
+    date_str = now.strftime("%A, %B %d, %Y")
+
+    return Titled(
+        "Daily Rotation",
+        P(
+            f"Use item ",
+            Strong(item_number),
+            f" today! ({date_str} in {tz})",
+            class_="result",
+        ),
+        P("Change number of items:"),
+        rotation_form(),
+        Script(timezone_script),
+    )
+
 
 @rt("/")
 def home():
-    return Titled("Daily Rotation",
-                 P("Enter the number of items you want to rotate through:"),
-                 rotation_form(),
-                 Script(timezone_script))
+    return Titled(
+        "Daily Rotation",
+        P("Enter the number of items you want to rotate through:"),
+        rotation_form(),
+        Script(timezone_script),
+    )
+
 
 @rt("/select")
 def select(request):
@@ -54,36 +68,42 @@ def select(request):
         tz = request.query_params.get("tz")
         if not tz:
             # If no timezone specified, return a page that auto-detects and redirects
-            return Titled("Redirecting...",
-                     Script(f"""
-                         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                         window.location.href = "/{items}?tz=" + encodeURIComponent(tz);
-                     """))
+            return Titled(
+                "Redirecting...",
+                Script(f"""
+                    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    window.location.href = "/{items}?tz=" + encodeURIComponent(tz);
+                    """),
+            )
         # Validate input before redirecting
         calculate_rotation(items, tz)
         return Redirect(f"/{items}?tz={tz}")
     except (ValueError, TypeError):
-        return Titled("Error",
-                     H1("Invalid Input"),
-                     P(f"Please enter a number of at least {MIN_ITEMS}"),
-                     rotation_form(),
-                     Script(timezone_script))
+        return Titled(
+            "Error",
+            H1("Invalid Input"),
+            P(f"Please enter a number of at least {MIN_ITEMS}"),
+            rotation_form(),
+            Script(timezone_script),
+        )
+
 
 def rotation_form():
     return Form(
-        Input(type="number", 
-              name="items",
-              min=str(MIN_ITEMS),
-              placeholder=f"Number of items (minimum {MIN_ITEMS})",
-              required=True),
-        Input(type="hidden", 
-              name="tz",
-              id="timezone-input"),
+        Input(
+            type="number",
+            name="items",
+            min=str(MIN_ITEMS),
+            placeholder=f"Number of items (minimum {MIN_ITEMS})",
+            required=True,
+        ),
+        Input(type="hidden", name="tz", id="timezone-input"),
         Button("Get Today's Item", type="submit"),
         method="GET",
         action="/select",
-        class_="rotation-form"
+        class_="rotation-form",
     )
+
 
 timezone_script = """
     function setTimezone() {
@@ -106,6 +126,7 @@ timezone_script = """
     }
     setTimezone();
 """
+
 
 @rt("/styles.css")
 def styles():
@@ -135,5 +156,6 @@ def styles():
             color: #dc2626;
         }
     """)
+
 
 serve()
