@@ -1,5 +1,5 @@
 from fasthtml.common import *
-from datetime import datetime
+from datetime import datetime, date
 import pytz
 
 app, rt = fast_app()
@@ -8,48 +8,75 @@ app, rt = fast_app()
 MIN_ITEMS = 1
 
 
-def calculate_rotation(num_items: int, tz: str) -> int:
+def calculate_rotation(num_items: int, tz: str, start_date: date = date(1970, 1, 1), start_item: int = 1) -> int:
     """Calculate which item to use based on number of items and current date."""
-    if num_items < MIN_ITEMS:
-        raise ValueError(f"Number of items must be at least {MIN_ITEMS}")
+    if not (1 <= start_item <= num_items):
+        raise ValueError(f"Start item must be between 1 and {num_items}")
 
     timezone = pytz.timezone(tz)
-    now = datetime.now(timezone)
-    then = datetime(1970, 1, 1, tzinfo=timezone)
-    return (now - then).days % num_items + 1
+    now = datetime.now(timezone).date()
+    days_since_start = (now - start_date).days
+    
+    # Calculate the item number, taking into account the start_item
+    return ((days_since_start + (start_item - 1)) % num_items) + 1
 
 
+@rt("/{num_items:int}/{start_date}/{start_item:int}")
+@rt("/{num_items:int}/{start_date}")
 @rt("/{num_items:int}")
-def get(num_items: int, request):
+def get(num_items: int, request, start_date: str = None, start_item: int = 1):
+    """Handle rotation calculation with optional start date and item."""
     tz = request.query_params.get("tz")
     if not tz:
         # If no timezone specified, return a page that auto-detects and redirects
+        base_url = f"/{num_items}"
+        if start_date:
+            base_url += f"/{start_date}"
+            if start_item != 1:
+                base_url += f"/{start_item}"
         return Titled(
             "Redirecting...",
             Script(f"""
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                window.location.href = "/{num_items}?tz=" + encodeURIComponent(tz);
+                window.location.href = "{base_url}?tz=" + encodeURIComponent(tz);
                 """),
         )
 
-    timezone = pytz.timezone(tz)
-    now = datetime.now(timezone)
-    item_number = calculate_rotation(num_items, tz)
-    date_str = now.strftime("%A, %B %d, %Y")
+    try:
+        # Parse start date if provided, otherwise use default
+        parsed_start_date = (
+            datetime.strptime(start_date, "%Y-%m-%d").date()
+            if start_date
+            else date(1970, 1, 1)
+        )
+        
+        item_number = calculate_rotation(num_items, tz, parsed_start_date, start_item)
+        
+        timezone = pytz.timezone(tz)
+        now = datetime.now(timezone)
+        date_str = now.strftime("%A, %B %d, %Y")
 
-    return Titled(
-        "Daily Rotation",
-        P("A simple tool that helps you rotate through numbered items daily."),
-        P(
-            f"Use item ",
-            Strong(item_number),
-            f" today! ({date_str} in {tz})",
-            class_="result",
-        ),
-        P("Change number of items:"),
-        rotation_form(),
-        Script(timezone_script),
-    )
+        return Titled(
+            "Daily Rotation",
+            P("A simple tool that helps you rotate through numbered items daily."),
+            P(
+                f"Use item ",
+                Strong(item_number),
+                f" today! ({date_str} in {tz})",
+                class_="result",
+            ),
+            P("Change settings:"),
+            rotation_form(num_items, parsed_start_date, start_item),
+            Script(timezone_script),
+        )
+    except (ValueError, TypeError):
+        return Titled(
+            "Error",
+            H1("Invalid Input"),
+            P("Please enter valid start date and item number"),
+            rotation_form(),
+            Script(timezone_script),
+        )
 
 
 @rt("/")
@@ -67,19 +94,24 @@ def home():
 def select(request):
     try:
         items = int(request.query_params.get("items", "1"))
-        tz = request.query_params.get("tz")
-        if not tz:
-            # If no timezone specified, return a page that auto-detects and redirects
-            return Titled(
-                "Redirecting...",
-                Script(f"""
-                    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                    window.location.href = "/{items}?tz=" + encodeURIComponent(tz);
-                    """),
-            )
-        # Validate input before redirecting
-        calculate_rotation(items, tz)
-        return Redirect(f"/{items}?tz={tz}")
+        start_date = request.query_params.get("start_date", "").strip()
+        start_item = request.query_params.get("start_item", "").strip()
+        tz = request.query_params.get("tz", "")
+
+        # Build the base URL with required parameters
+        url = f"/{items}"
+        
+        # Add optional parameters to path
+        if start_date:
+            url += f"/{start_date}"
+            if start_item and start_item != "1":
+                url += f"/{start_item}"
+        
+        # Add timezone as query parameter if present
+        if tz:
+            url += f"?tz={tz}"
+        
+        return Redirect(url)
     except (ValueError, TypeError):
         return Titled(
             "Error",
@@ -90,14 +122,46 @@ def select(request):
         )
 
 
-def rotation_form():
+def rotation_form(current_items=None, start_date=None, start_item=None):
+    # Use Jan 1, 1970 as default if no start_date provided
+    display_date = start_date if start_date else date(1970, 1, 1)
+    
     return Form(
-        Input(
-            type="number",
-            name="items",
-            min=str(MIN_ITEMS),
-            placeholder=f"Number of items (minimum {MIN_ITEMS})",
-            required=True,
+        Div(
+            Label("Number of items:", For="items"),
+            Input(
+                type="number",
+                name="items",
+                id="items",
+                min=str(MIN_ITEMS),
+                value=str(current_items) if current_items else "",
+                placeholder=f"Minimum {MIN_ITEMS}",
+                required=True,
+            ),
+            class_="form-group",
+        ),
+        Div(
+            Label("Start date:", For="start_date"),
+            Input(
+                type="date",
+                name="start_date",
+                id="start_date",
+                value=display_date.strftime("%Y-%m-%d"),
+                placeholder="Default: Jan 1, 1970",
+            ),
+            class_="form-group",
+        ),
+        Div(
+            Label("Start with item:", For="start_item"),
+            Input(
+                type="number",
+                name="start_item",
+                id="start_item",
+                min="1",
+                value=str(start_item) if start_item else "",
+                placeholder="Default: 1",
+            ),
+            class_="form-group",
         ),
         Input(type="hidden", name="tz", id="timezone-input"),
         Button("Get Today's Item", type="submit"),
@@ -161,6 +225,43 @@ def styles():
         }
         .error {
             color: #dc2626;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            min-width: 200px;
+        }
+        
+        .rotation-form {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        label {
+            color: #4b5563;
+            font-weight: 500;
+        }
+        
+        input {
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.25rem;
+            width: 100%;
+        }
+        
+        button {
+            margin-top: 1rem;
+            padding: 0.5rem 1rem;
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 0.25rem;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #1d4ed8;
         }
     """)
 
