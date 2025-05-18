@@ -17,3 +17,6 @@ dist/
 build/
 .uv/
 uv.lock 
+
+.cursorindexingignore
+.specstory
